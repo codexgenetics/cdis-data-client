@@ -728,6 +728,7 @@ type Gen3Interface interface {
 	CheckForShepherdAPI(profileConfig *jwt.Credential) (bool, error)
 	GetResponse(profileConfig *jwt.Credential, endpointPostPrefix string, method string, contentType string, bodyBytes []byte) (string, *http.Response, error)
 	DoRequestWithSignedHeader(profileConfig *jwt.Credential, endpointPostPrefix string, contentType string, bodyBytes []byte) (jwt.JsonMessage, error)
+	DoRequestWithSignedHeaderAndMethod(profileConfig *jwt.Credential, endpointPostPrefix string, contentType string, method string, bodyBytes []byte) (jwt.JsonMessage, error)
 	MakeARequest(method string, apiEndpoint string, accessToken string, contentType string, headers map[string]string, body *bytes.Buffer, noTimeout bool) (*http.Response, error)
 	GetHost(profileConfig *jwt.Credential) (*url.URL, error)
 }
@@ -778,7 +779,7 @@ func UpdateIndexdRecord(g3 Gen3Interface, guid string, filePath string) error {
 	}
 
 	endpoint := commonUtils.IndexdIndexEndpoint + "/" + guid
-	_, err = g3.DoRequestWithSignedHeader(&profileConfig, endpoint, "application/json", bodyBytes)
+	_, err = g3.DoRequestWithSignedHeaderAndMethod(&profileConfig, endpoint, "application/json", "PUT", bodyBytes)
 	if err != nil {
 		return fmt.Errorf("could not update indexd record: %w", err)
 	}
