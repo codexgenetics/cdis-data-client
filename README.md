@@ -84,3 +84,15 @@ The metadata file should be a JSON file in the format:
 The `aliases` and `metadata` properties are optional. Some Gen3 data commons require the `authz` property to be specified in order to upload a data file.
 
 If you do not know what `authz` to use, you can look at your `Profile` tab or `/identity` page of the Gen3 data commons you are uploading to. You will see a list of *authz resources* in the format `/example/authz/resource`: these are the authz resources you have access to.
+
+### Uploading to Alibaba Cloud Object Storage
+
+When using Gen3 with Alibaba Cloud Object Storage, the standard `upload` command may not correctly trigger the indexing process, leaving files in a "generating" state. To address this, a patched version of the `upload` command called `upload-ali` is provided.
+
+The `upload-ali` command functions identically to the `upload` command, but includes an additional step to manually update the `indexd` record with the file's metadata (MD5 hash and size) after a successful upload. This ensures that files are correctly indexed.
+
+To use the `upload-ali` command, simply replace `upload` with `upload-ali` in your command-line instructions:
+```
+gen3-client upload-ali --profile=<profile-name> --upload-path=<path-to-file>
+```
+All other flags and options are the same as the `upload` command.

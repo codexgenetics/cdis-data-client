@@ -35,6 +35,7 @@ func Execute() {
 
 func init() {
 	cobra.OnInitialize(initConfig)
+	initAli()
 
 	// Define flags and configuration settings.
 	RootCmd.PersistentFlags().StringVar(&profile, "profile", "", "Specify profile to use")

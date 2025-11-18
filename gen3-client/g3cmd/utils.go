@@ -2,6 +2,8 @@ package g3cmd
 
 import (
 	"bytes"
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -87,6 +89,13 @@ type RenamedOrSkippedFileInfo struct {
 	GUID        string
 	OldFilename string
 	NewFilename string
+}
+
+// IndexdUpdateRecordObject represents the payload for updating an indexd record
+type IndexdUpdateRecordObject struct {
+	Rev    string            `json:"rev"`
+	Hashes map[string]string `json:"hashes"`
+	Size   int64             `json:"size"`
 }
 
 const (
@@ -738,4 +747,77 @@ func NewGen3Interface() Gen3Interface {
 		functions,
 	}
 	return gen3Interface
+}
+
+func UpdateIndexdRecord(g3 Gen3Interface, guid string, filePath string) error {
+	log.Println("Updating indexd record for GUID " + guid)
+	record, err := getIndexdRecord(g3, guid)
+	if err != nil {
+		return fmt.Errorf("could not get indexd record: %w", err)
+	}
+
+	hash, err := CalculateFileHash(filePath)
+	if err != nil {
+		return fmt.Errorf("could not calculate file hash: %w", err)
+	}
+
+	fi, err := os.Stat(filePath)
+	if err != nil {
+		return fmt.Errorf("could not get file info: %w", err)
+	}
+
+	updateReq := IndexdUpdateRecordObject{
+		Rev:    record.Rev,
+		Hashes: map[string]string{"md5": hash},
+		Size:   fi.Size(),
+	}
+
+	bodyBytes, err := json.Marshal(updateReq)
+	if err != nil {
+		return fmt.Errorf("could not marshal update request: %w", err)
+	}
+
+	endpoint := commonUtils.IndexdIndexEndpoint + "/" + guid
+	_, err = g3.DoRequestWithSignedHeader(&profileConfig, endpoint, "application/json", bodyBytes)
+	if err != nil {
+		return fmt.Errorf("could not update indexd record: %w", err)
+	}
+
+	log.Println("Successfully updated indexd record for GUID " + guid)
+	return nil
+}
+
+type IndexdRecord struct {
+	Rev string `json:"rev"`
+}
+
+func getIndexdRecord(g3 Gen3Interface, guid string) (IndexdRecord, error) {
+	endpoint := commonUtils.IndexdIndexEndpoint + "/" + guid
+	_, r, err := g3.GetResponse(&profileConfig, endpoint, "GET", "", nil)
+	if err != nil {
+		return IndexdRecord{}, fmt.Errorf("could not get indexd record: %w", err)
+	}
+	defer r.Body.Close()
+	if r.StatusCode != 200 {
+		return IndexdRecord{}, fmt.Errorf("could not get indexd record: status code %d", r.StatusCode)
+	}
+	var record IndexdRecord
+	if err := json.NewDecoder(r.Body).Decode(&record); err != nil {
+		return IndexdRecord{}, fmt.Errorf("could not decode indexd record: %w", err)
+	}
+	return record, nil
+}
+
+func CalculateFileHash(filePath string) (string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	hash := md5.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
 }
