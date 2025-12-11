@@ -751,41 +751,66 @@ func NewGen3Interface() Gen3Interface {
 }
 
 func UpdateIndexdRecord(g3 Gen3Interface, guid string, filePath string) error {
-	log.Println("Updating indexd record for GUID " + guid)
-	record, err := getIndexdRecord(g3, guid)
-	if err != nil {
-		return fmt.Errorf("could not get indexd record: %w", err)
-	}
+    // 1. Get the current record to find the 'rev' (Revision)
+    // Uses the existing function that targets commonUtils.IndexdIndexEndpoint + "/" + guid
+    record, err := getIndexdRecord(g3, guid)
+    if err != nil {
+        return fmt.Errorf("could not get indexd record for /blank update: %w", err)
+    }
 
-	hash, err := CalculateFileHash(filePath)
-	if err != nil {
-		return fmt.Errorf("could not calculate file hash: %w", err)
-	}
+    // 2. Calculate Local MD5 and Size
+    hash, err := CalculateFileHash(filePath)
+    if err != nil {
+        return fmt.Errorf("could not calculate file hash for /blank update: %w", err)
+    }
 
-	fi, err := os.Stat(filePath)
-	if err != nil {
-		return fmt.Errorf("could not get file info: %w", err)
-	}
+    fi, err := os.Stat(filePath)
+    if err != nil {
+        return fmt.Errorf("could not get file info for /blank update: %w", err)
+    }
 
-	updateReq := IndexdUpdateRecordObject{
-		Rev:    record.Rev,
-		Hashes: map[string]string{"md5": hash},
-		Size:   fi.Size(),
-	}
+    // 3. Prepare PUT request body
+    updateReq := IndexdUpdateRecordObject{
+        Rev:    record.Rev,
+        Hashes: map[string]string{"md5": hash},
+        Size:   fi.Size(),
+    }
 
-	bodyBytes, err := json.Marshal(updateReq)
-	if err != nil {
-		return fmt.Errorf("could not marshal update request: %w", err)
-	}
+    bodyBytes, err := json.Marshal(updateReq)
+    if err != nil {
+        return fmt.Errorf("could not marshal update request for /blank update: %w", err)
+    }
 
-	endpoint := commonUtils.IndexdIndexEndpoint + "/" + guid
-	_, err = g3.DoRequestWithSignedHeaderAndMethod(&profileConfig, endpoint, "application/json", "PUT", bodyBytes)
-	if err != nil {
-		return fmt.Errorf("could not update indexd record: %w", err)
-	}
+    // 4. PUT to the /blank endpoint
+    // The endpoint must be: commonUtils.IndexdIndexEndpoint + "/blank/" + guid + "?rev=" + record.Rev
+    // The existing DoRequestWithSignedHeaderAndMethod handles the URL path and query parameters
+    // We only need the base path here, as we pass the rev in the body (per your existing IndexdUpdateRecordObject structure)
+    // NOTE: Indexd's /blank endpoint takes the REV in the URL query string, not the body, for updates.
+    // We must adjust the endpoint and remove rev from the body or use the query param in the URL.
+    
+    blankUpdateReq := struct {
+        Hashes map[string]string `json:"hashes"`
+        Size   int64             `json:"size"`
+    }{
+        Hashes: map[string]string{"md5": hash},
+        Size:   fi.Size(),
+    }
+    bodyBytes, err = json.Marshal(blankUpdateReq)
+    if err != nil {
+        return fmt.Errorf("could not marshal update request for /blank update: %w", err)
+    }
+    
+    // Construct the full endpoint path including the 'rev' query parameter
+    // commonUtils.IndexdIndexEndpoint is likely "index"
+    endpoint := commonUtils.IndexdIndexEndpoint + "/blank/" + guid + "?rev=" + record.Rev
+    
+    _, err = g3.DoRequestWithSignedHeaderAndMethod(&profileConfig, endpoint, "application/json", "PUT", bodyBytes)
+    if err != nil {
+        return fmt.Errorf("could not update indexd /blank record: %w", err)
+    }
 
-	log.Println("Successfully updated indexd record for GUID " + guid)
-	return nil
+    log.Println("Successfully updated indexd /blank record for GUID " + guid)
+    return nil
 }
 
 type IndexdRecord struct {
