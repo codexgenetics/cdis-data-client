@@ -34,7 +34,7 @@ const ShepherdVersionEndpoint = "/mds/version"
 
 // IndexdIndexEndpoint is the endpoint postfix for INDEXD index
 const IndexdIndexEndpoint = "/index/index"
-const IndexdBlankEndpoint = "/index/blank"
+const IndexdBlankEndpoint = "/index/index/blank"
 
 // FenceUserEndpoint is the endpoint postfix for FENCE user
 const FenceUserEndpoint = "/user/user"
