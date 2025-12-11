@@ -802,7 +802,7 @@ func UpdateIndexdRecord(g3 Gen3Interface, guid string, filePath string) error {
     
     // Construct the full endpoint path including the 'rev' query parameter
     // commonUtils.IndexdIndexEndpoint is likely "index"
-    endpoint := commonUtils.IndexdIndexEndpoint + "/blank/" + guid + "?rev=" + record.Rev
+	endpoint := commonUtils.IndexdBlankEndpoint + "/" + guid + "?rev=" + record.Rev
     
     _, err = g3.DoRequestWithSignedHeaderAndMethod(&profileConfig, endpoint, "application/json", "PUT", bodyBytes)
     if err != nil {
