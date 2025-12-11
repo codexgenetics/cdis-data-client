@@ -26,3 +26,5 @@ cdis-data-client
 
 # End of https://www.toptal.com/developers/gitignore/api/go
 upload-cli
+upload-cli-mac
+upload-cli-linux
