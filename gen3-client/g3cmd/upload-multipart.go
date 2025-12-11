@@ -117,7 +117,7 @@ func multipartUpload(g3 Gen3Interface, fileInfo FileInfo, retryCount int, bucket
 						return
 					}
 					req.ContentLength = int64(n)
-					client := &http.Client{}
+					client := insecureClient()
 					resp, err := client.Do(req)
 					if err != nil {
 						err = errors.New("Error occurred during upload: " + err.Error())

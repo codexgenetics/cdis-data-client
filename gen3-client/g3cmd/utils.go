@@ -3,6 +3,7 @@ package g3cmd
 import (
 	"bytes"
 	"crypto/md5"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -40,7 +41,7 @@ type ManifestObject struct {
 // InitRequestObject represents the payload that sends to FENCE for getting a singlepart upload presignedURL or init a multipart upload for new object file
 type InitRequestObject struct {
 	Filename string `json:"file_name"`
-	Bucket 	 string `json:"bucket,omitempty"`
+	Bucket   string `json:"bucket,omitempty"`
 }
 
 // ShepherdInitRequestObject represents the payload that sends to Shepherd for getting a singlepart upload presignedURL or init a multipart upload for new object file
@@ -60,7 +61,7 @@ type MultipartUploadRequestObject struct {
 	Key        string `json:"key"`
 	UploadID   string `json:"uploadId"`
 	PartNumber int    `json:"partNumber"`
-	Bucket 	   string `json:"bucket,omitempty"`
+	Bucket     string `json:"bucket,omitempty"`
 }
 
 // MultipartCompleteRequestObject represents the payload that sends to FENCE for completeing a multipart upload
@@ -68,7 +69,7 @@ type MultipartCompleteRequestObject struct {
 	Key      string                `json:"key"`
 	UploadID string                `json:"uploadId"`
 	Parts    []MultipartPartObject `json:"parts"`
-	Bucket 	 string `json:"bucket,omitempty"`
+	Bucket   string                `json:"bucket,omitempty"`
 }
 
 // MultipartPartObject represents a part object
@@ -131,6 +132,22 @@ const defaultNumOfWorkers = 10
 // MaxRetryCount is the maximum retry number per record
 const MaxRetryCount = 5
 const maxWaitTime = 300
+
+func insecureClient() *http.Client {
+	return &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: isLocalDev(),
+			},
+		},
+	}
+}
+
+func isLocalDev() bool {
+	return strings.Contains(profileConfig.APIEndpoint, "localhost") ||
+		strings.Contains(profileConfig.APIEndpoint, "127.0.0.1") ||
+		strings.HasSuffix(profileConfig.APIEndpoint, ".local")
+}
 
 // InitMultipartUpload helps sending requests to FENCE to init a multipart upload
 func InitMultipartUpload(g3 Gen3Interface, filename string, bucketName string) (string, string, error) {
@@ -357,13 +374,13 @@ func GeneratePresignedURL(g3 Gen3Interface, filename string, fileMetadata common
 
 // GenerateUploadRequest helps preparing the HTTP request for upload and the progress bar for single part upload
 func GenerateUploadRequest(g3 Gen3Interface, furObject commonUtils.FileUploadRequestObject, file *os.File) (commonUtils.FileUploadRequestObject, error) {
-        if furObject.PresignedURL == "" {
-               endPointPostfix := commonUtils.FenceDataUploadEndpoint + "/" + furObject.GUID + "?file_name=" + url.QueryEscape(furObject.Filename)
+	if furObject.PresignedURL == "" {
+		endPointPostfix := commonUtils.FenceDataUploadEndpoint + "/" + furObject.GUID + "?file_name=" + url.QueryEscape(furObject.Filename)
 
-                // ensure bucket is set
-                if furObject.Bucket != "" {
-                    endPointPostfix += "&bucket=" + furObject.Bucket
-                }
+		// ensure bucket is set
+		if furObject.Bucket != "" {
+			endPointPostfix += "&bucket=" + furObject.Bucket
+		}
 
 		msg, err := g3.DoRequestWithSignedHeader(&profileConfig, endPointPostfix, "application/json", nil)
 		if err != nil && !strings.Contains(err.Error(), "No GUID found") {
@@ -550,7 +567,7 @@ func uploadFile(furObject commonUtils.FileUploadRequestObject, retryCount int) e
 	log.Println("Uploading data ...")
 	furObject.Bar.Start()
 
-	client := &http.Client{}
+	client := insecureClient()
 	resp, err := client.Do(furObject.Request)
 	if err != nil {
 		logs.AddToFailedLog(furObject.FilePath, furObject.Filename, furObject.FileMetadata, furObject.GUID, retryCount, false, true)
@@ -612,9 +629,9 @@ func batchUpload(gen3Interface Gen3Interface, furObjects []commonUtils.FileUploa
 	var guid string
 
 	for i := range furObjects {
-                if furObjects[i].Bucket == "" {
-                    furObjects[i].Bucket = bucketName
-                }
+		if furObjects[i].Bucket == "" {
+			furObjects[i].Bucket = bucketName
+		}
 		if furObjects[i].GUID == "" {
 			respURL, guid, err = GeneratePresignedURL(gen3Interface, furObjects[i].Filename, furObjects[i].FileMetadata, bucketName)
 			if err != nil {
@@ -656,7 +673,7 @@ func batchUpload(gen3Interface Gen3Interface, furObjects []commonUtils.FileUploa
 		return
 	}
 
-	client := &http.Client{}
+	client := insecureClient()
 	wg := sync.WaitGroup{}
 	for i := 0; i < workers; i++ {
 		wg.Add(1)
@@ -751,66 +768,66 @@ func NewGen3Interface() Gen3Interface {
 }
 
 func UpdateIndexdRecord(g3 Gen3Interface, guid string, filePath string) error {
-    // 1. Get the current record to find the 'rev' (Revision)
-    // Uses the existing function that targets commonUtils.IndexdIndexEndpoint + "/" + guid
-    record, err := getIndexdRecord(g3, guid)
-    if err != nil {
-        return fmt.Errorf("could not get indexd record for /blank update: %w", err)
-    }
+	// 1. Get the current record to find the 'rev' (Revision)
+	// Uses the existing function that targets commonUtils.IndexdIndexEndpoint + "/" + guid
+	record, err := getIndexdRecord(g3, guid)
+	if err != nil {
+		return fmt.Errorf("could not get indexd record for /blank update: %w", err)
+	}
 
-    // 2. Calculate Local MD5 and Size
-    hash, err := CalculateFileHash(filePath)
-    if err != nil {
-        return fmt.Errorf("could not calculate file hash for /blank update: %w", err)
-    }
+	// 2. Calculate Local MD5 and Size
+	hash, err := CalculateFileHash(filePath)
+	if err != nil {
+		return fmt.Errorf("could not calculate file hash for /blank update: %w", err)
+	}
 
-    fi, err := os.Stat(filePath)
-    if err != nil {
-        return fmt.Errorf("could not get file info for /blank update: %w", err)
-    }
+	fi, err := os.Stat(filePath)
+	if err != nil {
+		return fmt.Errorf("could not get file info for /blank update: %w", err)
+	}
 
-    // 3. Prepare PUT request body
-    updateReq := IndexdUpdateRecordObject{
-        Rev:    record.Rev,
-        Hashes: map[string]string{"md5": hash},
-        Size:   fi.Size(),
-    }
+	// 3. Prepare PUT request body
+	updateReq := IndexdUpdateRecordObject{
+		Rev:    record.Rev,
+		Hashes: map[string]string{"md5": hash},
+		Size:   fi.Size(),
+	}
 
-    bodyBytes, err := json.Marshal(updateReq)
-    if err != nil {
-        return fmt.Errorf("could not marshal update request for /blank update: %w", err)
-    }
+	bodyBytes, err := json.Marshal(updateReq)
+	if err != nil {
+		return fmt.Errorf("could not marshal update request for /blank update: %w", err)
+	}
 
-    // 4. PUT to the /blank endpoint
-    // The endpoint must be: commonUtils.IndexdIndexEndpoint + "/blank/" + guid + "?rev=" + record.Rev
-    // The existing DoRequestWithSignedHeaderAndMethod handles the URL path and query parameters
-    // We only need the base path here, as we pass the rev in the body (per your existing IndexdUpdateRecordObject structure)
-    // NOTE: Indexd's /blank endpoint takes the REV in the URL query string, not the body, for updates.
-    // We must adjust the endpoint and remove rev from the body or use the query param in the URL.
-    
-    blankUpdateReq := struct {
-        Hashes map[string]string `json:"hashes"`
-        Size   int64             `json:"size"`
-    }{
-        Hashes: map[string]string{"md5": hash},
-        Size:   fi.Size(),
-    }
-    bodyBytes, err = json.Marshal(blankUpdateReq)
-    if err != nil {
-        return fmt.Errorf("could not marshal update request for /blank update: %w", err)
-    }
-    
-    // Construct the full endpoint path including the 'rev' query parameter
-    // commonUtils.IndexdIndexEndpoint is likely "index"
+	// 4. PUT to the /blank endpoint
+	// The endpoint must be: commonUtils.IndexdIndexEndpoint + "/blank/" + guid + "?rev=" + record.Rev
+	// The existing DoRequestWithSignedHeaderAndMethod handles the URL path and query parameters
+	// We only need the base path here, as we pass the rev in the body (per your existing IndexdUpdateRecordObject structure)
+	// NOTE: Indexd's /blank endpoint takes the REV in the URL query string, not the body, for updates.
+	// We must adjust the endpoint and remove rev from the body or use the query param in the URL.
+
+	blankUpdateReq := struct {
+		Hashes map[string]string `json:"hashes"`
+		Size   int64             `json:"size"`
+	}{
+		Hashes: map[string]string{"md5": hash},
+		Size:   fi.Size(),
+	}
+	bodyBytes, err = json.Marshal(blankUpdateReq)
+	if err != nil {
+		return fmt.Errorf("could not marshal update request for /blank update: %w", err)
+	}
+
+	// Construct the full endpoint path including the 'rev' query parameter
+	// commonUtils.IndexdIndexEndpoint is likely "index"
 	endpoint := commonUtils.IndexdBlankEndpoint + "/" + guid + "?rev=" + record.Rev
-    
-    _, err = g3.DoRequestWithSignedHeaderAndMethod(&profileConfig, endpoint, "application/json", "PUT", bodyBytes)
-    if err != nil {
-        return fmt.Errorf("could not update indexd /blank record: %w", err)
-    }
 
-    log.Println("Successfully updated indexd /blank record for GUID " + guid)
-    return nil
+	_, err = g3.DoRequestWithSignedHeaderAndMethod(&profileConfig, endpoint, "application/json", "PUT", bodyBytes)
+	if err != nil {
+		return fmt.Errorf("could not update indexd /blank record: %w", err)
+	}
+
+	log.Println("Successfully updated indexd /blank record for GUID " + guid)
+	return nil
 }
 
 type IndexdRecord struct {

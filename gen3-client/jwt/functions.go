@@ -5,6 +5,7 @@ package jwt
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -56,10 +57,22 @@ func (r *Request) MakeARequest(method string, apiEndpoint string, accessToken st
 		headers["Content-Type"] = contentType
 	}
 	var client *http.Client
-	if noTimeout {
-		client = &http.Client{}
+	if strings.Contains(apiEndpoint, "localhost") ||
+		strings.Contains(apiEndpoint, "127.0.0.1") ||
+		strings.HasSuffix(apiEndpoint, ".local") {
+		client = &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{
+					InsecureSkipVerify: true,
+				},
+			},
+		}
 	} else {
-		client = &http.Client{Timeout: commonUtils.DefaultTimeout}
+		client = &http.Client{}
+	}
+
+	if !noTimeout {
+		client.Timeout = commonUtils.DefaultTimeout
 	}
 	var req *http.Request
 	var err error
